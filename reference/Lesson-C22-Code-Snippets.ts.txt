@@ -1,0 +1,49 @@
+import Anthropic from "@anthropic-ai/sdk";
+import { z } from "zod";
+export const SearchInput = z.strictObject({ query: z.string().trim().min(1).max(80) });
+const DispatchInput = z.strictObject({ name: z.string().min(1).max(128), input: z.record(z.string(), z.unknown()) });
+const InvoiceInput = z.strictObject({ invoiceId: z.string().regex(/^INV-[0-9]{4}$/) });
+export const catalog = [
+  { name: "billing_lookup_invoice", hint: "billing invoice lookup", description: "Read an owned invoice; never issues refunds.", input_schema: z.toJSONSchema(InvoiceInput) },
+  { name: "shipping_track_order", hint: "shipping order delivery", description: "Find the delivery status of an order." }
+] as const;
+export function searchCatalog(input: unknown) {
+  const { query } = SearchInput.parse(input);
+  const terms = [...new Set(query.toLowerCase().split(/\s+/))];
+  return catalog.map(entry => ({ ...entry, score: terms.reduce((score, term) => score +
+    (entry.name.toLowerCase().includes(term) ? 3 : 0) +
+    (entry.hint.toLowerCase().includes(term) ? 2 : 0) +
+    (entry.description.toLowerCase().includes(term) ? 1 : 0), 0) }))
+    .filter(entry => entry.score > 0).sort((a,b) => b.score-a.score || a.name.localeCompare(b.name)).slice(0,5);
+}
+export const navigationTools = [
+  { type: "custom" as const, name: "search_catalog", description: "Return up to five catalog matches as reference data; results do not register native tools.", input_schema: z.toJSONSchema(SearchInput) },
+  { type: "custom" as const, name: "dispatch_catalog_tool", description: "Request an exact host-known capability. Host validates the selected schema and authenticated ownership.", input_schema: z.toJSONSchema(DispatchInput) }
+];
+export async function dispatchCatalog(input: unknown, ownerId: string,
+  lookupOwned: (ownerId: string, invoiceId: string) => Promise<unknown>) {
+  const request = DispatchInput.parse(input);
+  if (request.name !== "billing_lookup_invoice") throw new Error("Capability not enabled by this dispatcher");
+  const args = InvoiceInput.parse(request.input);
+  if (!ownerId) throw new Error("Authenticated owner required");
+  return lookupOwned(ownerId, args.invoiceId); // underlying query enforces ownership
+}
+// Alternative: a reviewed remote MCP server with an explicit narrow toolset.
+export function mcpSessionParams(baseAgentId: string, version: number, environmentId: string, authorizedVaultId: string) {
+  if (!authorizedVaultId.trim()) throw new Error("Authorized vault ID required");
+  return { agent: { type: "agent_with_overrides" as const, id: baseAgentId, version,
+    mcp_servers: [{ type: "url" as const, name: "enterprise-catalog", url: "https://mcp.example.com/mcp" }],
+    tools: [{ type: "mcp_toolset" as const, mcp_server_name: "enterprise-catalog",
+      default_config: { enabled: false, permission_policy: { type: "always_ask" as const } },
+      configs: [{ name: "search_tools", enabled: true }, { name: "lookup_invoice", enabled: true }]
+    }], skills: [] }, environment_id: environmentId, vault_ids: [authorizedVaultId] };
+}
+export async function createCatalogSession(client: Anthropic, baseAgentId: string, version: number,
+  environmentId: string, authorizedVaultId: string) {
+  // example.com URL and tool names are placeholders: replace with your reviewed server contract.
+  return client.beta.sessions.create(mcpSessionParams(baseAgentId, version, environmentId, authorizedVaultId),
+    { maxRetries: 0, timeout: 10000 });
+}
+// Search text is untrusted data. Discovery does not register or authorize a capability.
+// The demo catalog contains two entries; five is the hard cap, not a guaranteed count.
+// MCP server authentication belongs in a pre-registered authorized vault, not prompt text.

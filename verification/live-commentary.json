@@ -1,0 +1,29 @@
+{
+  "source": "live-provider-commentary",
+  "sessionId": "sesn_01NSm2AfHgZMs1CHY4ZUEMJL",
+  "answer": "This local teaching experiment demonstrates a tool catalog discovery process where terms are ranked, results are capped at five, and a selected tool is validated before use. It simulates a billing invoice lookup (\"INV-1001\") as a read-only, ownership-scoped operation against demo data. The \"passed\" outcome reflects that the catalog-matching and authorization steps completed successfully within the defined local scenario.",
+  "stopReason": "end_turn",
+  "eventTypes": [
+    "session.status_running",
+    "session.thread_status_running",
+    "user.message",
+    "span.model_request_start",
+    "agent.thinking",
+    "agent.message",
+    "span.model_request_end",
+    "session.thread_status_idle",
+    "session.usage",
+    "session.status_idle"
+  ],
+  "requestUsage": [
+    {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 622,
+      "output_tokens": 116,
+      "speed": "standard"
+    }
+  ],
+  "experimentHash": "c0422b3219d6134b221e43cb65531e490593e84c397d27db99545c22be714094",
+  "scope": "A real text-only model response about the local experiment. External integrations and the experiment's correctness are not certified by this response."
+}
