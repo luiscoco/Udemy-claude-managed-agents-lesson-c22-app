@@ -42,28 +42,91 @@ CLAUDE_MANAGED_ENVIRONMENT_ID=your_environment_id
 PORT=3022
 ```
 
-## How the application was developed
+## How the app was build
 
-The browser collects inputs; the Node host validates requests; the lesson implementation produces observable evidence. The architecture page walks through the real source with numbered steps, prerequisite configuration, source filenames and code excerpts.
+### 1. Rank and bound discovery results
 
-### Lesson implementation
+Query terms are deduplicated, catalog entries are scored and only five matches can be returned. Discovery produces references, not new tool registrations.
 
-[src/lesson.ts](https://github.com/luiscoco/Udemy-claude-managed-agents-lesson-c22-app/blob/main/src/lesson.ts)
+Source: [src/lesson.ts](src/lesson.ts#L13) · selected statements
 
 ```typescript
-  async run(input) {
+const catalog = [
+  { name: "billing_lookup_invoice", hint: "billing invoice lookup" },
+  { name: "shipping_track_order", hint: "shipping order delivery" },
+];
 
-const catalog=[{name:"billing_lookup_invoice",hint:"billing invoice lookup"},{name:"shipping_track_order",hint:"shipping order delivery"}];
-const terms=unique(text(input,"query").toLowerCase().split(/\s+/).filter(Boolean));
-const matches=catalog.map(c=>({...c,score:terms.filter(t=>(c.name+" "+c.hint).includes(t)).length})).filter(c=>c.score>0).sort((a,b)=>b.score-a.score).slice(0,5);
-if(text(input,"selectedTool")!=="billing_lookup_invoice"||text(input,"invoiceId")!=="INV-1001")return report("rejected","The requested capability or owned invoice is not enabled",{catalogMatches:matches},["Return bounded reference matches","Require exact host dispatcher authorization"]);
-return report("passed","Discovered a tool and dispatched an authorized read-only lookup",{matches:matches.length,catalogMatches:matches,invoice:{id:"INV-1001",owner:"demo-user",totalCents:4200}},["Rank catalog terms","Cap results at five","Validate the selected tool and arguments","Apply ownership at lookup"]);
+const terms = unique(
+  text(input, "query").toLowerCase().split(/\s+/).filter(Boolean),
+);
 
-  }
-};
+const matches = catalog
+  .map((c) => ({
+    ...c,
+    score: terms.filter((t) => (c.name + " " + c.hint).includes(t)).length,
+  }))
+  .filter((c) => c.score > 0)
+  .sort((a, b) => b.score - a.score)
+  .slice(0, 5);
 ```
 
-Read the architecture page for the remaining source excerpts and explanations, including input handling and optional provider behavior. The diagram describes this application, rather than implying that an external integration has been implemented.
+### 2. Authorize an exact dispatcher operation
+
+The host still checks the selected tool name and seeded owned invoice. A matching search hint alone cannot authorize another capability or invoice.
+
+Source: [src/lesson.ts](src/lesson.ts#L16) · selected statements
+
+```typescript
+if (
+  text(input, "selectedTool") !== "billing_lookup_invoice" ||
+  text(input, "invoiceId") !== "INV-1001"
+)
+  return report(
+    "rejected",
+    "The requested capability or owned invoice is not enabled",
+    { catalogMatches: matches },
+    [
+      "Return bounded reference matches",
+      "Require exact host dispatcher authorization",
+    ],
+  );
+
+return report(
+  "passed",
+  "Discovered a tool and dispatched an authorized read-only lookup",
+  {
+    matches: matches.length,
+    catalogMatches: matches,
+    invoice: { id: "INV-1001", owner: "demo-user", totalCents: 4200 },
+  },
+  [
+    "Rank catalog terms",
+    "Cap results at five",
+    "Validate the selected tool and arguments",
+    "Apply ownership at lookup",
+  ],
+);
+```
+
+### Check your understanding
+
+Run **Discover invoice lookup** in the application. Compare the result with these scenario expectations:
+
+```json
+{
+  "input": {
+    "query": "billing invoice",
+    "selectedTool": "billing_lookup_invoice",
+    "invoiceId": "INV-1001"
+  },
+  "expectedOutcome": "passed",
+  "checkEvidence": {
+    "matches": 1
+  }
+}
+```
+
+Then try **Discovery cannot enable deletion**. Its expected outcome is `rejected`; identify the condition or evidence field that explains the difference.
 
 ## Validation
 
